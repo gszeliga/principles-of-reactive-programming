@@ -86,12 +86,13 @@ abstract class CircuitSimulator extends Simulator {
 
     def getExpectedControlWiresSignals(number: Int, cw: List[Wire]): List[(Int, Int)] = {
 
-      def fillUpWithPendingControlWiresSignals(current: List[Int], pending: Int): List[Int] = {
-        if (pending <= 0) current
-        else fillUpWithPendingControlWiresSignals(0 :: current, pending - 1)
-      }
-
       def buildControlWiresCombination(number: Int, binary: List[Int]): List[Int] = {
+        
+        def fillUpWithPendingControlWiresSignals(current: List[Int], pending: Int): List[Int] = {
+          if (pending <= 0) current
+          else fillUpWithPendingControlWiresSignals(0 :: current, pending - 1)
+        }
+        
         number match {
           case 0 => fillUpWithPendingControlWiresSignals(0 :: Nil, cw.size - 1)
           case 1 => {
