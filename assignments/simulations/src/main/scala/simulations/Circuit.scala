@@ -109,9 +109,10 @@ abstract class CircuitSimulator extends Simulator {
       else buildControlWiresCombination(number, Nil).reverse.zipWithIndex
     }
 
-    def joinAllIntermidiateWires(cw_outputs: Seq[Wire], exit: Wire, outputIndex: Int) {
+    def joinAllIntermediateWires(availableIntermediateWires: Seq[Wire], exit: Wire, outputIndex: Int) {
       val nil = new Wire
-      cw_outputs match {
+      
+      availableIntermediateWires match {
 
         case Nil => orGate(in, nil, exit) //Since there's no control wires we bridge the signal to the exit
         case output :: Nil => {
@@ -123,35 +124,35 @@ abstract class CircuitSimulator extends Simulator {
           val newOut = new Wire
           andGate(out1, out2, newOut)
           probe("Intermediate AND gate", newOut)
-          joinAllIntermidiateWires(tail :+ newOut, exit, outputIndex)
+          joinAllIntermediateWires(tail :+ newOut, exit, outputIndex)
         }
       }
 
     }
 
-    out.view.zipWithIndex.map { ow_with_index =>
-      ow_with_index match {
-        case (ow, index) => joinAllIntermidiateWires(getExpectedControlWiresSignals(index, c).map({
-          cw_with_index =>
+    out.view.zipWithIndex.map { outputsWithIndex =>
+      outputsWithIndex match {
+        case (outputWire, outputWireIndex) => joinAllIntermediateWires(getExpectedControlWiresSignals(outputWireIndex, c).map({
+          controlWireSignal =>
 
-            val cw = c(cw_with_index._2)
-            val cwout = new Wire
+            val controlWire = c(controlWireSignal._2)
+            val intermediateOutputWire = new Wire
 
-            val inverted = new Wire
-            inverter(cw, inverted)
+            val invertedControlWire = new Wire
+            inverter(controlWire, invertedControlWire)
 
-            //If should I consider control signal
-            if (cw_with_index._1 == 1) {
-              andGate(cw, in, cwout)
-              probe(s"C${cw_with_index._2} AND with signal", cwout)
+            //If control wire signal must be active
+            if (controlWireSignal._1 == 1) {
+              andGate(controlWire, in, intermediateOutputWire)
+              probe(s"C${controlWireSignal._2} AND with signal", intermediateOutputWire)
             } else {
-              andGate(inverted, in, cwout)
-              probe(s"signal and NOT(C${cw_with_index._2})", cwout)
+              andGate(invertedControlWire, in, intermediateOutputWire)
+              probe(s"signal and NOT(C${controlWireSignal._2})", intermediateOutputWire)
             }
 
-            cwout
+            intermediateOutputWire
 
-        }), ow, index)
+        }), outputWire, outputWireIndex)
       }
     }.force
 
