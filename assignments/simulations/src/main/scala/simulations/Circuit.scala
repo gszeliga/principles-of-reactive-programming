@@ -84,62 +84,74 @@ abstract class CircuitSimulator extends Simulator {
 
   def demux(in: Wire, c: List[Wire], out: List[Wire]) {
 
-    def getExpectedControlWireSignals(source: Int): List[(Int, Int)] = {
+    def getExpectedControlWiresSignals(number: Int, cw: List[Wire]): List[(Int, Int)] = {
 
-      def control(number: Int, binary: List[Int]): List[Int] = {
-        if (number == 0) 1 :: Nil
-        else if (number == 1) 1 :: binary
-        else {
-          val reminder = if (number % 2 == 0) 0 else 1
-          control(number / 2, reminder :: binary)
+      def fillUpWithPendingControlWiresSignals(current: List[Int], pending: Int): List[Int] = {
+        if (pending <= 0) current
+        else fillUpWithPendingControlWiresSignals(0 :: current, pending - 1)
+      }
+
+      def buildControlWiresCombination(number: Int, binary: List[Int]): List[Int] = {
+        number match {
+          case 0 => fillUpWithPendingControlWiresSignals(0 :: Nil, cw.size - 1)
+          case 1 => {
+            val tmp = 1 :: binary
+            fillUpWithPendingControlWiresSignals(tmp, cw.size - tmp.size)
+          }
+          case _ => {
+            val reminder = if (number % 2 == 0) 0 else 1
+            buildControlWiresCombination(number / 2, reminder :: binary)
+          }
         }
       }
 
-      control(source, Nil).reverse.zipWithIndex
+      if (cw.isEmpty) Nil
+      else buildControlWiresCombination(number, Nil).reverse.zipWithIndex
     }
 
-    def putAllTogether(outputs: Seq[Wire], exit: Wire) {
-      outputs match {
+    def joinAllIntermidiateWires(cw_outputs: Seq[Wire], exit: Wire, outputIndex: Int) {
+      val nil = new Wire
+      cw_outputs match {
 
-        case Nil =>
+        case Nil => orGate(in, nil, exit) //Since there's no control wires we bridge the signal to the exit
         case output :: Nil => {
-          orGate(output, exit, exit)
-          probe("Final OR gate", output)
-          probe("Exit value", exit)
+          orGate(output, nil, exit)
+          probe("Final OR gate on OUT" + outputIndex, output)
+          probe("Exit value on OUT" + outputIndex, exit)
         }
         case out1 :: out2 :: tail => {
           val newOut = new Wire
           andGate(out1, out2, newOut)
           probe("Intermediate AND gate", newOut)
-          putAllTogether(tail :+ newOut, exit)
+          joinAllIntermidiateWires(tail :+ newOut, exit, outputIndex)
         }
       }
 
     }
 
-    val inverted = new Wire
-    inverter(in, inverted)
-
     out.view.zipWithIndex.map { ow_with_index =>
       ow_with_index match {
-        case (ow, index) => putAllTogether(getExpectedControlWireSignals(index).map({
+        case (ow, index) => joinAllIntermidiateWires(getExpectedControlWiresSignals(index, c).map({
           cw_with_index =>
 
             val cw = c(cw_with_index._2)
             val cwout = new Wire
+
+            val inverted = new Wire
+            inverter(cw, inverted)
 
             //If should I consider control signal
             if (cw_with_index._1 == 1) {
               andGate(cw, in, cwout)
               probe(s"C${cw_with_index._2} AND with signal", cwout)
             } else {
-              andGate(cw, inverted, cwout)
-              probe(s"C${cw_with_index._2} AND with NOT(signal)", cwout)
+              andGate(inverted, in, cwout)
+              probe(s"signal and NOT(C${cw_with_index._2})", cwout)
             }
 
             cwout
 
-        }), ow)
+        }), ow, index)
       }
     }.force
 
