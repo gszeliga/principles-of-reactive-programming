@@ -36,6 +36,125 @@ class EpidemySimulator extends Simulator {
   val probabilityOfInfection = probabilityExpression(40)
   val probabilityOfDeath = probabilityExpression(25)
 
+  def availableRooms(currentRow: Int, currentCol: Int) = {
+
+    def nextCoordinate(current: Int, edge: Int)(reachedTheEdge: Int => Boolean)(next: Int => Int) = {
+      if (reachedTheEdge(current)) edge else next(current)
+    }
+
+    val aboveRow = nextCoordinate(currentRow, SimConfig.roomRows - 1)(_ == 0) { _ - 1 }
+    val belowRow = nextCoordinate(currentRow, 0)(_ == SimConfig.roomRows - 1) { _ + 1 }
+
+    val aboveCol = nextCoordinate(currentCol, SimConfig.roomColumns - 1)(_ == 0) { _ - 1 }
+    val belowCol = nextCoordinate(currentCol, 0)(_ == SimConfig.roomColumns - 1) { _ + 1 }
+
+    List((aboveCol, currentRow), (belowCol, currentRow), (currentCol, aboveRow), (currentCol, belowRow))
+  }
+
+  trait State {
+    def evaluate(currentDay: Int, person: Person)
+  }
+
+  object Initial extends State {
+    def evaluate(currentDay: Int, person: Person) = {
+      val status = if (person.infected) Infected else Healthy
+      status.evaluate(currentDay, person)
+    }
+  }
+
+  object Healthy extends State {
+    def evaluate(currentDay: Int, person: Person) = {
+
+      val notVisibleInfectedRooms = availableRooms(person.row, person.col).filter(room => persons.filter(p => p.row == room._2 && p.col == room._1 && (p.sick || p.dead)).isEmpty)
+
+      if (!notVisibleInfectedRooms.isEmpty) {
+
+        val cleanRoom = notVisibleInfectedRooms((notVisibleInfectedRooms.size * random).toInt)
+
+        person.row = cleanRoom._2
+        person.col = cleanRoom._1
+      }
+
+      val theresInfectedPeople = !persons.filter(p => p.row == person.row && p.col == person.col && p.infected).isEmpty
+
+      if (theresInfectedPeople) {
+        person.infected = probabilityOfInfection((100 * random).toInt) == 1
+
+        if (person.infected) {
+          person.status = Infected
+          println(s"Person ${person.id} got infected")
+        } else {
+          person.status = Healthy
+        }
+      } else {
+        person.status = Healthy
+      }
+
+    }
+  }
+
+  object Infected extends State {
+    def evaluate(currentDay: Int, person: Person) = {
+      person.infectedFor = person.infectedFor + currentDay
+
+      println(s"Person ${person.id} has been infected for ${person.infectedFor}")
+
+      val anyRoom = availableRooms(person.row, person.row)((4 * random).toInt)
+
+      person.row = anyRoom._2
+      person.col = anyRoom._1
+
+      person.sick = person.infectedFor >= 6
+
+      if (person.sick) {
+        println(s"Person ${person.id} got sick")
+        person.status = Sick
+      } else if (person.infectedFor >= 16 && person.infectedFor <= 18) {
+        println(s"Person ${person.id} is now immune")
+        person.immune = true
+        person.status = Immune
+      } else person.status = Infected
+    }
+  }
+
+  object Immune extends State {
+    def evaluate(currentDay: Int, person: Person) = {
+
+      if (person.infectedFor >= 18) {
+        person.immune = false
+        person.infected = false
+        person.infectedFor = 0
+        person.status = Healthy
+      }
+    }
+  }
+
+  object Sick extends State {
+    def evaluate(currentDay: Int, person: Person) = {
+
+      person.infectedFor = person.infectedFor + currentDay
+      println(s"Person ${person.id} has been sick for ${person.infectedFor}")
+
+      val anyRoom = availableRooms(person.row, person.col)((4 * random).toInt)
+
+      person.row = anyRoom._2
+      person.col = anyRoom._1
+
+      person.dead = (person.infectedFor > 14) && (probabilityOfDeath((100 * random).toInt) == 1)
+
+      if (person.dead) {
+        println(s"Person ${person.id} died")
+        person.status = Dead
+      } else person.status = Sick
+    }
+  }
+
+  object Dead extends State {
+    def evaluate(currentDay: Int, person: Person) = {
+
+    }
+  }
+
   class Person(val id: Int) {
     var infected = false
     var sick = false
@@ -46,110 +165,21 @@ class EpidemySimulator extends Simulator {
     var row: Int = randomBelow(roomRows)
     var col: Int = randomBelow(roomColumns)
 
-    var infectedAt: Int = 0
+    var infectedFor: Int = 0
+    var status: State = Initial
 
     def nextMove() = ((5 * random).toInt) + 1
 
-    def relocate(delay: Int): Unit = {
+    def relocate(days: Int, person: Person): Unit = {
 
-      afterDelay(delay)({
-
-        val currentPersonsDistribution: List[Person] = persons
-
-        val currentDay = delay
-        val currenRow = row
-        val currenCol = col
-
-        val isCurrentlyInfected = infected
-        val elapsedTimeSinceInfection = if (isCurrentlyInfected) (currentDay - infectedAt) else 0
-        val isCurrentlySick = sick
-        val isCurrentlyDead = dead
-        val isCurrentlyImmune = elapsedTimeSinceInfection >= 16 && elapsedTimeSinceInfection <= 18 && !isCurrentlySick
-        val mustBeHealthy = isCurrentlyImmune && elapsedTimeSinceInfection >= 18
-
-        if (mustBeHealthy) {
-
-          infected = false
-          sick = false
-          immune = false
-          infectedAt = 0
-
-          println(s"Person ${id} is health again!")
-
-        } else {
-
-          immune = isCurrentlyImmune
-
-          if (isCurrentlyInfected && !isCurrentlySick && !isCurrentlyImmune) {
-
-            sick = elapsedTimeSinceInfection >= 6
-
-            if (sick) {
-              println(s"Person ${id} got sick after ${elapsedTimeSinceInfection} days!!")
-            }
-          }
-
-          if (isCurrentlySick && !isCurrentlyDead) {
-
-            dead = ((delay - infectedAt) > 14) && (probabilityOfDeath((100 * random).toInt) == 1)
-
-            if (dead) {
-              println(s"Person ${id} died after ${elapsedTimeSinceInfection} days")
-            }
-          }
-        }
-
-        if (!dead) {
-
-          def nextCoordinate(current: Int, edge: Int)(reachedTheEdge: Int => Boolean)(next: Int => Int) = {
-            if (reachedTheEdge(current)) edge else next(current)
-          }
-
-          val aboveRow = nextCoordinate(currenRow, SimConfig.roomRows)(_ == 0) { _ - 1 }
-          val belowRow = nextCoordinate(currenRow, 0)(_ == SimConfig.roomRows) { _ + 1 }
-
-          val aboveCol = nextCoordinate(currenCol, SimConfig.roomColumns)(_ == 0) { _ - 1 }
-          val belowCol = nextCoordinate(currenCol, 0)(_ == SimConfig.roomColumns) { _ + 1 }
-
-          val availableRooms = List((aboveCol, currenRow), (belowCol, currenRow), (currenCol, aboveRow), (currenCol, belowRow))
-
-          if (!isCurrentlyInfected) {
-
-            val notVisibleInfectedRooms = availableRooms.filter(pos => currentPersonsDistribution.filter(p => p.row == pos._2 && p.col == pos._1 && (p.sick || p.dead) && p.id != id).isEmpty)
-
-            if (!notVisibleInfectedRooms.isEmpty) {
-
-              val cleanRoom = notVisibleInfectedRooms((notVisibleInfectedRooms.size * random).toInt)
-
-              row = cleanRoom._2
-              col = cleanRoom._1
-
-              val theresInfectedPeople = !currentPersonsDistribution.filter(p => p.row == row && p.col == col && p.infected && p.id != id).isEmpty
-
-              if (theresInfectedPeople) {
-                infected = probabilityOfInfection((100 * random).toInt) == 1
-
-                if (infected) {
-                  infectedAt = currentDay
-                  println(s"Person ${id} got infected at day ${infectedAt}!!")
-                }
-              }
-
-              relocate(currentDay + nextMove)
-            }
-          } else if (isCurrentlyInfected) {
-            val anyRoom = availableRooms((availableRooms.size * random).toInt)
-
-            row = anyRoom._2
-            col = anyRoom._1
-
-            relocate(currentDay + nextMove)
-          }
-        }
+      afterDelay(days)({
+        val currentPerson = person
+        currentPerson.status.evaluate(days, currentPerson)
+        relocate(nextMove, person)
       })
     }
 
-    relocate(nextMove)
+    relocate(nextMove, this)
 
   }
 

@@ -19,7 +19,7 @@ object test {
         control(current / 2, reminder :: binary)
       }
     }
-		
+
     control(source, Nil).reverse.view.zipWithIndex.force
   }                                               //> getControlWireSignals: (source: Int, cws: Int)Seq[(Int, Int)]
 
@@ -28,4 +28,32 @@ object test {
   getControlWireSignals(2, 2)                     //> res2: Seq[(Int, Int)] = List((0,0), (1,1))
   getControlWireSignals(3, 2)                     //> res3: Seq[(Int, Int)] = List((1,0), (1,1))
 
+  trait State {
+    def execute()
+  }
+
+  object StateA extends State {def execute(){}}
+  object StateB extends State  {def execute(){}}
+
+  class Person(val id: Int) {
+    var infected = false
+    var sick = false
+    var immune = false
+    var dead = false
+    var state: State = StateA
+  }
+
+  var p: Person = new Person(1)                   //> p  : simulations.test.Person = simulations.test$$anonfun$main$1$Person$1@3e
+                                                  //| ddc72c
+  
+  def change(p: Person) {
+    p.state = StateB
+  }                                               //> change: (p: simulations.test.Person)Unit
+  
+  p.state                                         //> res4: simulations.test.State = simulations.test$$anonfun$main$1$StateA$2$@5
+                                                  //| 23f39f2
+  change(p)
+  p.state                                         //> res5: simulations.test.State = simulations.test$$anonfun$main$1$StateB$2$@5
+                                                  //| bc3efa4
+  
 }
