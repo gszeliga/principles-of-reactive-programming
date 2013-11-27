@@ -51,7 +51,7 @@ class EpidemySimulator extends Simulator {
   object Healthy extends State {
     def evaluate(currentDay: Int, person: Person) = {
 
-      val theresInfectedPeople = !persons.filter(p => p.row == person.row && p.col == person.col && p.infected).isEmpty
+      val theresInfectedPeople = persons.filter(p => (p.row == person.row) && (p.col == person.col)).count(p => p.infected) > 0 
 
       if (theresInfectedPeople && ((randomBelow(100) + 1) <= 40)) {
         Infected
@@ -165,7 +165,7 @@ class EpidemySimulator extends Simulator {
     private def move = {
       state match {
         case Healthy => {
-          val notVisibleInfectedRooms = availableRooms(row, col).filter(room => persons.filter(p => p.row == room._2 && p.col == room._1 && (p.sick || p.dead)).isEmpty)
+          val notVisibleInfectedRooms = availableRooms(row, col).filter(room => persons.filter(p => (p.row == room._2) && (p.col == room._1)).count(p => (p.sick || p.dead)) == 0)
 
           if (!notVisibleInfectedRooms.isEmpty) {
 
@@ -190,18 +190,19 @@ class EpidemySimulator extends Simulator {
     private def waitUntil(days: Int): Unit = {
 
       afterDelay(days)({
-
-        state = state.evolve(days, this)
-
+    	
         state match {
           case Dead =>
-          case _ => { move; waitUntil(nextMoveIn) }
+          case _ => {
+            move
+            state = state.evolve(days, this)
+            waitUntil(nextMoveIn)
+          }
         }
-
       })
     }
 
-    def start = { waitUntil(nextMoveIn) }
+    def start = { state = state.evolve(0, this); waitUntil(nextMoveIn) }
 
   }
 
