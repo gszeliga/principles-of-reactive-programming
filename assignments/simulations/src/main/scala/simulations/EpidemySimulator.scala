@@ -36,15 +36,15 @@ class EpidemySimulator extends Simulator {
 
   trait State {
 
-    def evolve(currentDay: Int, person: Person) = {
-      move(person)
-      val newState = evaluate(currentDay, person)
-      newState.apply(person)
-      person.status = newState
+    def evolve(currentDay: Int, person: Person): State = {
+      val newStatus = evaluate(currentDay, person)
+
+      newStatus.apply(person)
+
+      newStatus
     }
 
     protected def apply(person: Person)
-    protected def move(person: Person)
     protected def evaluate(currentDay: Int, person: Person): State
   }
 
@@ -57,18 +57,6 @@ class EpidemySimulator extends Simulator {
         Infected
       } else this
 
-    }
-
-    def move(person: Person) = {
-      val notVisibleInfectedRooms = availableRooms(person.row, person.col).filter(room => persons.filter(p => p.row == room._2 && p.col == room._1 && (p.sick || p.dead)).isEmpty)
-
-      if (!notVisibleInfectedRooms.isEmpty) {
-
-        val cleanRoom = notVisibleInfectedRooms((notVisibleInfectedRooms.size * random).toInt)
-
-        person.row = cleanRoom._2
-        person.col = cleanRoom._1
-      }
     }
 
     def apply(person: Person) {
@@ -97,13 +85,6 @@ class EpidemySimulator extends Simulator {
 
     }
 
-    def move(person: Person) = {
-      val anyRoom = availableRooms(person.row, person.row)((4 * random).toInt)
-
-      person.row = anyRoom._2
-      person.col = anyRoom._1
-    }
-
     def apply(person: Person) = {
       person.dead = false
       person.infected = true
@@ -124,13 +105,6 @@ class EpidemySimulator extends Simulator {
         Dead
       } else this
 
-    }
-
-    def move(person: Person) = {
-      val anyRoom = availableRooms(person.row, person.row)((4 * random).toInt)
-
-      person.row = anyRoom._2
-      person.col = anyRoom._1
     }
 
     def apply(person: Person) = {
@@ -158,13 +132,6 @@ class EpidemySimulator extends Simulator {
       person.sick = false
     }
 
-    def move(person: Person) = {
-      val anyRoom = availableRooms(person.row, person.row)((4 * random).toInt)
-
-      person.row = anyRoom._2
-      person.col = anyRoom._1
-    }
-
   }
 
   object Dead extends State {
@@ -178,9 +145,6 @@ class EpidemySimulator extends Simulator {
       person.immune = false
       person.sick = false
     }
-
-    def move(person: Person) = {}
-
   }
 
   class Person(val id: Int) {
@@ -194,19 +158,50 @@ class EpidemySimulator extends Simulator {
     var col: Int = randomBelow(roomColumns)
 
     var infectedFor: Int = 0
-    var status: State = Healthy
+    var state: State = Healthy
 
-    private def nextCheck() = randomBelow(5) + 1
+    private def nextMoveIn() = randomBelow(5) + 1
+
+    private def move = {
+      state match {
+        case Healthy => {
+          val notVisibleInfectedRooms = availableRooms(row, col).filter(room => persons.filter(p => p.row == room._2 && p.col == room._1 && (p.sick || p.dead)).isEmpty)
+
+          if (!notVisibleInfectedRooms.isEmpty) {
+
+            val cleanRoom = notVisibleInfectedRooms((notVisibleInfectedRooms.size * random).toInt)
+
+            row = cleanRoom._2
+            col = cleanRoom._1
+          }
+        }
+
+        case Dead =>
+
+        case _ => {
+          val anyRoom = availableRooms(row, col)((4 * random).toInt)
+
+          row = anyRoom._2
+          col = anyRoom._1
+        }
+      }
+    }
 
     private def waitUntil(days: Int): Unit = {
 
       afterDelay(days)({
-        status.evolve(days, this)
-        waitUntil(nextCheck)
+
+        state = state.evolve(days, this)
+
+        state match {
+          case Dead =>
+          case _ => { move; waitUntil(nextMoveIn) }
+        }
+
       })
     }
 
-    def start = { waitUntil(0) }
+    def start = { waitUntil(nextMoveIn) }
 
   }
 
@@ -217,7 +212,7 @@ class EpidemySimulator extends Simulator {
         if (pending == 0) tmp
         else {
           val p = new Person(pending)
-          p.status = if ((randomBelow(100) + 1) == 1) Infected else Healthy
+          p.state = if ((randomBelow(100) + 1) == 1) Infected else Healthy
           populate(p :: tmp, pending - 1)
         }
       }
