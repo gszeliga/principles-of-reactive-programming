@@ -16,20 +16,17 @@ package object nodescala {
   /**
    * Adds extensions methods to the `Future` companion object.
    */
-  implicit class FutureCompanionOps[T](val f: scala.concurrent.Future[T]) extends AnyVal {
+  implicit class FutureCompanionOps[T](val f: Future.type) extends AnyVal {
 
     /**
      * Returns a future that is always completed with `value`.
      */
     def always[T](value: T): Future[T] = {
 
-      val p = Promise[T]()
-
-      f onComplete {
-        case tryValue => p.success(value)
+      async {
+        value
       }
 
-      p.future
     }
 
     /**
@@ -54,7 +51,7 @@ package object nodescala {
       val p = Promise[List[T]]
       p.success(Nil)
 
-      fs.foldLeft(p.future) { (acc, current) =>
+      fs.foldRight(p.future) { (current, acc) =>
         current flatMap (v => acc map (lst => v :: lst))
       }
 
@@ -98,7 +95,17 @@ package object nodescala {
     /**
      * Returns a future with a unit value that is completed after time `t`.
      */
-    def delay(t: Duration): Future[Unit] = ???
+    def delay(t: Duration): Future[Unit] = {
+
+      async {
+
+        val p = Promise[Unit]()
+
+        Await.ready(p.future, t)
+
+      }
+
+    }
 
     /**
      * Completes this future with user input.
@@ -128,7 +135,18 @@ package object nodescala {
      *  However, it is also non-deterministic -- it may throw or return a value
      *  depending on the current state of the `Future`.
      */
-    def now: T = ???
+    def now: T = {
+
+      f.value match {
+        case Some(t) => t match {
+          case Success(v) => v
+          case Failure(e) => throw new NoSuchElementException
+        }
+
+        case None => throw new NoSuchElementException
+      }
+
+    }
 
     /**
      * Continues the computation of this future by taking the current future
@@ -137,7 +155,24 @@ package object nodescala {
      *  The function `cont` is called only after the current future completes.
      *  The resulting future contains a value returned by `cont`.
      */
-    def continueWith[S](cont: Future[T] => S): Future[S] = ???
+    def continueWith[S](cont: Future[T] => S): Future[S] = {
+
+      val p = Promise[S]()
+
+      f onComplete {
+        case Success(_) =>
+
+          try {
+            p.success(cont(f))
+          } catch {
+            case e: Exception => p.failure(e)
+          }
+        case Failure(e) => p.failure(e)
+      }
+
+      p.future
+
+    }
 
     /**
      * Continues the computation of this future by taking the result
