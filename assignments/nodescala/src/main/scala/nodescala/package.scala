@@ -51,7 +51,7 @@ package object nodescala {
       val p = Promise[List[T]]
       p.success(Nil)
 
-      fs.foldLeft(p.future) { (acc, current) =>
+      fs.foldRight(p.future) { (current, acc) =>
         current flatMap (v => acc map (lst => v :: lst))
       }
 
