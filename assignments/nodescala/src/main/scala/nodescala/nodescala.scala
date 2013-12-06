@@ -2,6 +2,7 @@ package nodescala
 
 import com.sun.net.httpserver._
 import scala.concurrent._
+import scala.util._
 import scala.concurrent.duration._
 import ExecutionContext.Implicits.global
 import scala.async.Async.{ async, await }
@@ -31,7 +32,14 @@ trait NodeScala {
    *  @param token        the cancellation token for
    *  @param body         the response to write back
    */
-  private def respond(exchange: Exchange, token: CancellationToken, response: Response): Unit = ???
+  private def respond(exchange: Exchange, token: CancellationToken, response: Response): Unit = {
+
+    while (token.nonCancelled && response.hasNext) {
+      exchange.write(response.next)
+    }
+    
+    exchange.close
+  }
 
   /**
    * A server:
@@ -44,7 +52,32 @@ trait NodeScala {
    *  @param handler        a function mapping a request to a response
    *  @return               a subscription that can stop the server and all its asynchronous operations *entirely*.
    */
-  def start(relativePath: String)(handler: Request => Response): Subscription = ???
+  def start(relativePath: String)(handler: Request => Response): Subscription = {
+
+    val l = createListener(relativePath)
+
+    l.start
+
+    Future.run() { token =>
+
+      Future {
+
+        while (token.nonCancelled) {
+
+          l.nextRequest onComplete {
+
+            case Success((r, e)) => respond(e, token, handler(r))
+            case Failure(_) =>
+          }
+        }
+        
+        println("Stopped...")
+
+      }
+
+    }
+
+  }
 
 }
 

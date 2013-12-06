@@ -51,7 +51,7 @@ package object nodescala {
       val p = Promise[List[T]]
       p.success(Nil)
 
-      fs.foldRight(p.future) { (current, acc) =>
+      fs.foldLeft(p.future) { (acc, current) =>
         current flatMap (v => acc map (lst => v :: lst))
       }
 
@@ -97,11 +97,9 @@ package object nodescala {
      */
     def delay(t: Duration): Future[Unit] = {
 
-      async {
+      Future {
 
-        val p = Promise[Unit]()
-
-        Await.ready(p.future, t)
+        blocking(Thread.sleep(t.toMillis))
 
       }
 
