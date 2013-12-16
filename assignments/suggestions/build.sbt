@@ -25,7 +25,7 @@ libraryDependencies <++= (currentProject) { c =>
 
 libraryDependencies <++= (currentProject) { c =>
   if (c.isEmpty || c == "nodescala" || c == "suggestions") Seq(
-    "com.netflix.rxjava" % "rxjava-scala" % "0.15.0",
+    "com.netflix.rxjava" % "rxjava-scala" % "0.15.0" withSources(),
     "org.json4s" % "json4s-native_2.10" % "3.2.5",
     "org.scala-lang" % "scala-swing" % "2.10.3",
     "net.databinder.dispatch" % "dispatch-core_2.10" % "0.11.0",
