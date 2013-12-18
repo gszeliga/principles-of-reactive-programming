@@ -60,11 +60,12 @@ trait SwingApi {
           {
             field subscribe {
               case ValueChanged(txtf) => obs onNext (txtf.text)
+              case _ =>
             }
 
             Subscription {
               field unsubscribe {
-                case _ => obs.onCompleted()
+                case _ => obs onCompleted
               }
             }
           }
@@ -81,7 +82,24 @@ trait SwingApi {
      * @param field the button
      * @return an observable with a stream of buttons that have been clicked
      */
-    def clicks: Observable[Button] = ???
+    def clicks: Observable[Button] = {
+      Observable[Button] {
+        obs: Observer[Button] =>
+          {
+            button subscribe {
+              case ButtonClicked(btn) => obs onNext (btn)
+              case _ =>
+            }
+
+            Subscription {
+              button unsubscribe {
+                case _ => obs onCompleted
+              }
+            }
+
+          }
+      }
+    }
 
   }
 
