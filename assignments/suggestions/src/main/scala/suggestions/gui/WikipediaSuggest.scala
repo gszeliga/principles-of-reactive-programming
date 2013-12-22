@@ -16,6 +16,9 @@ import rx.lang.scala.Observable
 import rx.lang.scala.Subscription
 import observablex._
 import search._
+import rx.lang.scala.subjects.ReplaySubject
+import scala.util.Failure
+import scala.util.Failure
 
 object WikipediaSuggest extends SimpleSwingApplication with ConcreteSwingApi with ConcreteWikipediaApi {
 
@@ -80,39 +83,69 @@ object WikipediaSuggest extends SimpleSwingApplication with ConcreteSwingApi wit
      *  `myEditorPane.text = "act"` : sets the content of `myEditorPane` to "act"
      */
 
-    // TO IMPLEMENT
-    val searchTerms: Observable[String] = ???
+    val searchTerms: Observable[String] =
+      searchTermField.textValues
 
-    // TO IMPLEMENT
-    val suggestions: Observable[Try[List[String]]] = ???
+    val suggestions: Observable[Try[List[String]]] = {
 
+      val s = ReplaySubject[Try[List[String]]]
 
-    // TO IMPLEMENT
-    val suggestionSubscription: Subscription =  suggestions.observeOn(eventScheduler) subscribe {
-      x => ???
+      searchTerms.subscribe({ term: String =>
+        wikipediaSuggestion(term).onComplete { s.onNext(_) }
+      },
+        { e: Throwable => s.onError(e) },
+        { () => s.onCompleted })
+
+      s
+
     }
 
-    // TO IMPLEMENT
-    val selections: Observable[String] = ???
+    val suggestionSubscription: Subscription = suggestions.observeOn(eventScheduler) subscribe {
+      x =>
+        x match {
+          case Success(list) => suggestionList.listData = list
+          case Failure(e) => status.text = e.getMessage()
+        }
+    }
 
-    // TO IMPLEMENT
-    val pages: Observable[Try[String]] = ???
+    val selections: Observable[String] = {
 
-    // TO IMPLEMENT
+      val s = ReplaySubject[String]
+
+      button.clicks.subscribe { b: Button =>
+        suggestionList.selection.items map { s.onNext(_) }
+      }
+
+      s
+    }
+
+    val pages: Observable[Try[String]] = {
+
+      val s = ReplaySubject[Try[String]]
+
+      selections.subscribe(
+        { selection: String => wikipediaPage(selection).onComplete(s.onNext(_)) },
+        { e: Throwable => s.onError(e) },
+        { () => s.onCompleted })
+
+      s
+    }
+
     val pageSubscription: Subscription = pages.observeOn(eventScheduler) subscribe {
-      x => ???
+      x => x match {
+        case Success(value) => editorpane.text = value
+        case Failure(e) => status.text = e.getMessage()
+      }
     }
 
   }
 
 }
 
-
 trait ConcreteWikipediaApi extends WikipediaApi {
   def wikipediaSuggestion(term: String) = Search.wikipediaSuggestion(term)
   def wikipediaPage(term: String) = Search.wikipediaPage(term)
 }
-
 
 trait ConcreteSwingApi extends SwingApi {
   type ValueChanged = scala.swing.event.ValueChanged

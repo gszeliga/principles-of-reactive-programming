@@ -15,6 +15,8 @@ import search._
 import rx.lang.scala.Notification.{ OnNext, OnError, OnCompleted }
 import scala.util.Success
 import scala.util.Failure
+import rx.lang.scala.subjects.AsyncSubject
+import rx.lang.scala.subjects.ReplaySubject
 
 trait WikipediaApi {
 
@@ -77,7 +79,7 @@ trait WikipediaApi {
      */
     def timedOut(totalSec: Long): Observable[T] = {
 
-      obs.takeUntil(Observable.interval(Duration(totalSec, "SECONDS")));
+      obs.takeUntil(Observable.interval(totalSec seconds));
 
     }
 
@@ -107,9 +109,27 @@ trait WikipediaApi {
      *
      * Observable(Success(1), Succeess(1), Succeess(1), Succeess(2), Succeess(2), Succeess(2), Succeess(3), Succeess(3), Succeess(3))
      */
-    def concatRecovered[S](requestMethod: T => Observable[S]): Observable[Try[S]] = ???
+    def concatRecovered[S](requestMethod: T => Observable[S]): Observable[Try[S]] = {
 
+      val s = ReplaySubject[Try[S]]
+
+      obs.subscribe({ v: T =>
+
+        requestMethod(v).materialize.subscribe { subs =>
+          subs match {
+            case OnNext(v) => s.onNext(Success(v))
+            case OnError(e) => s.onNext(Failure(e))
+            case OnCompleted() => s.onCompleted
+          }
+        }
+
+      }, { e: Throwable =>
+        s.onError(e)
+      }, { () =>
+        s.onCompleted()
+      })
+
+      s
+    }
   }
-
 }
-
